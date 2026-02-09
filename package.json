@@ -1,0 +1,15 @@
+{
+  "name": "binance_monitor",
+  "version": "1.0.0",
+  "description": "Monitorea precios de BTC desde Binance y notifica al backend",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["crypto", "bitcoin", "monitor", "binance"],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
