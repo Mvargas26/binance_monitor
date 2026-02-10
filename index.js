@@ -1,6 +1,5 @@
 // ============================================
-// CRYPTO MONITOR - Railway Worker (TEST)
-// Consulta Binance y CoinGecko
+// CRYPTO MONITOR - Railway Worker (DEBUG)
 // ============================================
 
 const https = require('https');
@@ -20,14 +19,18 @@ function obtenerPrecioBinance() {
             });
             
             res.on('end', () => {
+                console.log('🔎 Respuesta Binance (raw):', data.substring(0, 200));
                 try {
                     const json = JSON.parse(data);
+                    console.log('🔎 Respuesta Binance (parsed):', json);
                     resolve(parseFloat(json.price));
                 } catch (error) {
+                    console.error('❌ Error parseando Binance:', error.message);
                     reject(error);
                 }
             });
         }).on('error', (error) => {
+            console.error('❌ Error de conexión Binance:', error.message);
             reject(error);
         });
     });
@@ -48,14 +51,18 @@ function obtenerPrecioCoinGecko() {
             });
             
             res.on('end', () => {
+                console.log('🔎 Respuesta CoinGecko (raw):', data.substring(0, 200));
                 try {
                     const json = JSON.parse(data);
+                    console.log('🔎 Respuesta CoinGecko (parsed):', json);
                     resolve(json.bitcoin.usd);
                 } catch (error) {
+                    console.error('❌ Error parseando CoinGecko:', error.message);
                     reject(error);
                 }
             });
         }).on('error', (error) => {
+            console.error('❌ Error de conexión CoinGecko:', error.message);
             reject(error);
         });
     });
@@ -98,19 +105,15 @@ async function obtenerPrecioBTC() {
     
     // Determinar precio final
     if (precioBinance && precioCoinGecko) {
-        // Si ambos funcionan, usar el promedio
         precioFinal = (precioBinance + precioCoinGecko) / 2;
         console.log(`[${timestamp}] 📊 Promedio: $${precioFinal.toFixed(2)}`);
     } else if (precioBinance) {
-        // Solo Binance funciona
         precioFinal = precioBinance;
         console.log(`[${timestamp}] ✅ Usando precio de Binance`);
     } else if (precioCoinGecko) {
-        // Solo CoinGecko funciona
         precioFinal = precioCoinGecko;
         console.log(`[${timestamp}] ✅ Usando precio de CoinGecko`);
     } else {
-        // Ninguno funciona
         throw new Error('No se pudo obtener precio de ninguna fuente');
     }
     
@@ -127,27 +130,11 @@ async function monitorear() {
     try {
         const precio = await obtenerPrecioBTC();
         console.log(`[${timestamp}] ✅ Precio final BTC: $${precio.toFixed(2)}`);
-        console.log(`[${timestamp}] ✅ Monitoreo completado (backend aún no conectado)`);
         
     } catch (error) {
         console.error(`[${timestamp}] ❌ Error:`, error.message);
     }
 }
 
-/**
- * Iniciar monitoreo continuo
- */
-function iniciar() {
-    console.log('🚀 Crypto Monitor iniciado (MODO TEST)');
-    console.log('📡 Consultando: Binance + CoinGecko');
-    console.log('⏰ Monitoreando cada 5 minutos...');
-    
-    // Ejecutar inmediatamente
-    monitorear();
-    
-    // Ejecutar cada 5 minutos
-    setInterval(monitorear, 5 * 60 * 1000);
-}
-
-// Iniciar
-iniciar();
+// Ejecutar una sola vez (para testing)
+monitorear();
