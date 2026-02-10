@@ -178,6 +178,9 @@ function enviarPrecioAlBackend(precio) {
  * Ejecutar monitoreo completo
  */
 async function monitorear() {
+
+    console.clear();
+
     const timestamp = new Date().toISOString();
     console.log(`\n[${timestamp}] 🔍 Iniciando monitoreo...`);
     
