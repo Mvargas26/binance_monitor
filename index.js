@@ -1,47 +1,55 @@
 // ============================================
-// CRYPTO MONITOR - Railway Worker (DEBUG)
+// CRYPTO MONITOR - Multi-source
+// CoinGecko + CryptoCompare (Binance bloqueado)
 // ============================================
 
 const https = require('https');
 
 /**
- * Obtener precio de BTC desde Binance
- */
-function obtenerPrecioBinance() {
-    return new Promise((resolve, reject) => {
-        const url = 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT';
-        
-        https.get(url, (res) => {
-            let data = '';
-            
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-            
-            res.on('end', () => {
-                console.log('🔎 Respuesta Binance (raw):', data.substring(0, 200));
-                try {
-                    const json = JSON.parse(data);
-                    console.log('🔎 Respuesta Binance (parsed):', json);
-                    resolve(parseFloat(json.price));
-                } catch (error) {
-                    console.error('❌ Error parseando Binance:', error.message);
-                    reject(error);
-                }
-            });
-        }).on('error', (error) => {
-            console.error('❌ Error de conexión Binance:', error.message);
-            reject(error);
-        });
-    });
-}
-
-/**
- * Obtener precio de BTC desde CoinGecko
+ * Obtener precio de BTC desde CoinGecko (con User-Agent)
  */
 function obtenerPrecioCoinGecko() {
     return new Promise((resolve, reject) => {
-        const url = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd';
+        const options = {
+            hostname: 'api.coingecko.com',
+            path: '/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        };
+        
+        https.get(options, (res) => {
+            let data = '';
+            
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    if (json.bitcoin && json.bitcoin.usd) {
+                        resolve(json.bitcoin.usd);
+                    } else {
+                        reject(new Error('Formato de respuesta inválido'));
+                    }
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }).on('error', (error) => {
+            reject(error);
+        });
+    });
+}
+
+/**
+ * Obtener precio de BTC desde CryptoCompare
+ */
+function obtenerPrecioCryptoCompare() {
+    return new Promise((resolve, reject) => {
+        const url = 'https://min-api.cryptocompare.com/data/price?fsym=BTC&tsyms=USD';
         
         https.get(url, (res) => {
             let data = '';
@@ -51,69 +59,73 @@ function obtenerPrecioCoinGecko() {
             });
             
             res.on('end', () => {
-                console.log('🔎 Respuesta CoinGecko (raw):', data.substring(0, 200));
                 try {
                     const json = JSON.parse(data);
-                    console.log('🔎 Respuesta CoinGecko (parsed):', json);
-                    resolve(json.bitcoin.usd);
+                    if (json.USD) {
+                        resolve(json.USD);
+                    } else {
+                        reject(new Error('Formato de respuesta inválido'));
+                    }
                 } catch (error) {
-                    console.error('❌ Error parseando CoinGecko:', error.message);
                     reject(error);
                 }
             });
         }).on('error', (error) => {
-            console.error('❌ Error de conexión CoinGecko:', error.message);
             reject(error);
         });
     });
 }
 
 /**
- * Obtener precio de BTC consultando ambas fuentes
+ * Obtener precio de BTC consultando múltiples fuentes
  */
 async function obtenerPrecioBTC() {
     const timestamp = new Date().toISOString();
     
     // Intentar obtener de ambas fuentes en paralelo
     const resultados = await Promise.allSettled([
-        obtenerPrecioBinance(),
-        obtenerPrecioCoinGecko()
+        obtenerPrecioCoinGecko(),
+        obtenerPrecioCryptoCompare()
     ]);
     
-    const binance = resultados[0];
-    const coingecko = resultados[1];
+    const coingecko = resultados[0];
+    const cryptocompare = resultados[1];
     
-    let precioBinance = null;
     let precioCoinGecko = null;
+    let precioCryptoCompare = null;
     let precioFinal = null;
-    
-    // Verificar Binance
-    if (binance.status === 'fulfilled') {
-        precioBinance = binance.value;
-        console.log(`[${timestamp}] 💰 Binance: $${precioBinance.toFixed(2)}`);
-    } else {
-        console.log(`[${timestamp}] ⚠️  Binance: Error - ${binance.reason.message}`);
-    }
     
     // Verificar CoinGecko
     if (coingecko.status === 'fulfilled') {
         precioCoinGecko = coingecko.value;
         console.log(`[${timestamp}] 💰 CoinGecko: $${precioCoinGecko.toFixed(2)}`);
     } else {
-        console.log(`[${timestamp}] ⚠️  CoinGecko: Error - ${coingecko.reason.message}`);
+        console.log(`[${timestamp}] ⚠️  CoinGecko: ${coingecko.reason.message}`);
+    }
+    
+    // Verificar CryptoCompare
+    if (cryptocompare.status === 'fulfilled') {
+        precioCryptoCompare = cryptocompare.value;
+        console.log(`[${timestamp}] 💰 CryptoCompare: $${precioCryptoCompare.toFixed(2)}`);
+    } else {
+        console.log(`[${timestamp}] ⚠️  CryptoCompare: ${cryptocompare.reason.message}`);
     }
     
     // Determinar precio final
-    if (precioBinance && precioCoinGecko) {
-        precioFinal = (precioBinance + precioCoinGecko) / 2;
+    if (precioCoinGecko && precioCryptoCompare) {
+        // Si ambos funcionan, usar el promedio
+        precioFinal = (precioCoinGecko + precioCryptoCompare) / 2;
         console.log(`[${timestamp}] 📊 Promedio: $${precioFinal.toFixed(2)}`);
-    } else if (precioBinance) {
-        precioFinal = precioBinance;
-        console.log(`[${timestamp}] ✅ Usando precio de Binance`);
     } else if (precioCoinGecko) {
+        // Solo CoinGecko funciona
         precioFinal = precioCoinGecko;
-        console.log(`[${timestamp}] ✅ Usando precio de CoinGecko`);
+        console.log(`[${timestamp}] ✅ Usando CoinGecko`);
+    } else if (precioCryptoCompare) {
+        // Solo CryptoCompare funciona
+        precioFinal = precioCryptoCompare;
+        console.log(`[${timestamp}] ✅ Usando CryptoCompare`);
     } else {
+        // Ninguno funciona
         throw new Error('No se pudo obtener precio de ninguna fuente');
     }
     
@@ -130,11 +142,27 @@ async function monitorear() {
     try {
         const precio = await obtenerPrecioBTC();
         console.log(`[${timestamp}] ✅ Precio final BTC: $${precio.toFixed(2)}`);
+        console.log(`[${timestamp}] ✅ Monitoreo completado`);
         
     } catch (error) {
         console.error(`[${timestamp}] ❌ Error:`, error.message);
     }
 }
 
-// Ejecutar una sola vez (para testing)
-monitorear();
+/**
+ * Iniciar monitoreo continuo
+ */
+function iniciar() {
+    console.log('🚀 Crypto Monitor iniciado');
+    console.log('📡 Fuentes: CoinGecko + CryptoCompare');
+    console.log('⏰ Monitoreando cada 5 minutos...');
+    
+    // Ejecutar inmediatamente
+    monitorear();
+    
+    // Ejecutar cada 5 minutos
+    setInterval(monitorear, 5 * 60 * 1000);
+}
+
+// Iniciar
+iniciar();
